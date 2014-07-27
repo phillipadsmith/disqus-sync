@@ -30,7 +30,25 @@ Create a disqus_sync.json configuration file:
 ```
 
 Install the database with [Sqitch](http://sqitch.org):
-* edit sqitch/sqitch.conf
+* create a sqitch/sqitch.conf
+
+```
+[core]
+	engine = pg
+	# plan_file = sqitch.plan
+	# top_dir = .
+	# deploy_dir = deploy
+	# revert_dir = revert
+	# verify_dir = verify
+	# extension = sql
+[core "pg"]
+	target = YOUR_DATABASE_NAME
+[deploy]
+	verify = true
+[rebase]
+	verify = true
+```
+
 * run `sqitch deploy`
 
 You should now have a database with the correct tables (authors & posts)
