@@ -1,0 +1,7 @@
+%syntax-version=1.0.0-b2
+%project=disqus-sync
+%uri=https://github.com:phillipadsmith/disqus-sync/
+
+schema 2014-07-26T17:20:21Z Phillip Smith <ps@phillipadsmith.com> # Add schema for disqus-sync
+authors [schema] 2014-07-26T17:35:54Z Phillip Smith <ps@phillipadsmith.com> # Table for disqus Authors
+posts [authors schema] 2014-07-26T17:37:07Z Phillip Smith <ps@phillipadsmith.com> # Table for disqus Posts

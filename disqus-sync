@@ -1,0 +1,224 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use utf8;
+use feature ':5.10';
+use autodie;
+use Readonly;
+
+use FindBin;
+BEGIN { unshift @INC, "$FindBin::Bin/../lib" }
+
+use Data::Dumper;
+use DBI;
+use Mojo::UserAgent;
+use Mojo::URL;
+use Mojo::Util;
+use Mojo::JSON;
+use Mojo::Util qw/ encode slurp spurt /;
+
+use constant DISCUS_API => 'https://disqus.com/api/3.0/forums/';
+use constant LIST_POSTS => 'listPosts.json';
+use constant LIST_USERS => 'listUsers.json';
+
+# Read configuration data
+my $config_file = slurp "$FindBin::Bin/disqus_sync.json";
+my $json        = Mojo::JSON->new;
+my $conf        = $json->decode( $config_file );
+
+# Get database handle
+my $dbh = DBI->connect(
+    "dbi:$conf->{'db_type'}:dbname=$conf->{'db_name'}", $conf->{'db_user'},
+    $conf->{'db_pass'}, { AutoCommit => 1 }
+);
+
+main();
+
+sub main {
+    my $since_id = get_newest_author_id();
+    say "Starting with author $since_id" if $since_id;
+    my $author_sync_count = sync_authors( $since_id );
+    say "Synced $author_sync_count authors" if $author_sync_count > 1; 
+    my $since           = get_newest_post_date();
+    say "Starting with post after $since" if $since;
+    my $post_sync_count = sync_posts( $since );
+    say "Final post sync count for this run was $post_sync_count";
+}
+
+sub list_posts {
+    my $args = shift;
+    my $ua   = Mojo::UserAgent->new()->max_redirects( 3 );
+    my $url  = Mojo::URL->new;
+    $url->query( $args );
+    my $api_url = DISCUS_API . LIST_POSTS;
+    my $tx      = $ua->get( $api_url . '?' . $url->query() );
+    my $cursor  = $tx->res->json( '/cursor/' );
+    my $posts   = $tx->res->json( '/response/' );
+    return ( $cursor, $posts );
+}
+
+sub list_users {
+    my $args = shift;
+    my $ua   = Mojo::UserAgent->new()->max_redirects( 3 );
+    my $url  = Mojo::URL->new;
+    $url->query( $args );
+    my $api_url = DISCUS_API . LIST_USERS;
+    my $tx      = $ua->get( $api_url . '?' . $url->query() );
+    my $cursor  = $tx->res->json( '/cursor/' );
+    my $authors = $tx->res->json( '/response/' );
+    return ( $cursor, $authors );
+}
+
+sub get_newest_post_date {
+    my $sql   = "SELECT MAX(createdAt) FROM disqus.posts";
+    my $since = $dbh->selectrow_array( $sql );
+    return $since;
+}
+
+sub get_newest_author_id {
+    my $sql      = "SELECT MAX(id) FROM disqus.authors";
+    my $since_id = $dbh->selectrow_array( $sql );
+    return $since_id;
+}
+
+sub sync_posts {
+    my $since   = shift;
+    my $hasnext = 'true';
+    my $cursor;
+    my $posts;
+    my $sync_count = 0;
+
+    # Loop & save
+    do {
+        ( $cursor, $posts ) = list_posts(
+            {   api_secret   => $conf->{'api_secret'},
+                access_token => $conf->{'access_token'},
+                forum        => $conf->{'forum'},
+                order        => 'asc',
+                limit        => 100,
+                (   defined $cursor
+                    ? ( cursor => $cursor->{'next'} )
+                    : ( since => $since )
+                ),
+            }
+        );
+        my $sth = $dbh->prepare(
+            "INSERT INTO disqus.posts(
+            isflagged, 
+            parent, 
+            author_id, 
+            isdeleted, 
+            isapproved, 
+            dislikes, 
+            raw_message, 
+            createdat, 
+            id, 
+            thread, 
+            numreports, 
+            likes, 
+            isedited, 
+            points, 
+            message, 
+            isspam, 
+            ishighlighted
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+        );
+
+        for my $post ( @$posts ) {
+
+            # Silly API returns an existing post using since
+            my $sql = "SELECT id FROM disqus.posts where id = $post->{'id'}";
+            my $id  = $dbh->selectrow_array( $sql );
+            next if $id;
+
+            my $rv = $sth->execute(
+                $post->{'isFlagged'},   $post->{'parent'},
+                $post->{'author_id'},   $post->{'isDeleted'},
+                $post->{'isApproved'},  $post->{'dislikes'},
+                $post->{'raw_message'}, $post->{'createdAt'},
+                $post->{'id'},          $post->{'thread'},
+                $post->{'numReports'},  $post->{'likes'},
+                $post->{'isEdited'},    $post->{'points'},
+                $post->{'message'},     $post->{'isSpam'},
+                $post->{'isHighlighted'}
+            );
+            if ( $sth->errstr ) {
+                say $sth->errstr;
+                say Dumper( $post );
+                die;
+            }
+        }
+        $sync_count += scalar @$posts;
+        say "Synced $sync_count so far...";
+
+    } while ( scalar @$posts > 1 );
+    return $sync_count;
+}
+
+sub sync_authors {
+    my $since_id = shift;
+    my $hasnext  = 'true';
+    my $cursor;
+    my $authors;
+    my $sync_count = 0;
+
+    # Loop & save
+    do {
+        ( $cursor, $authors ) = list_users(
+            {   api_secret   => $conf->{'api_secret'},
+                access_token => $conf->{'access_token'},
+                forum        => $conf->{'forum'},
+                order        => 'asc',
+                limit        => 100,
+                (   defined $cursor
+                    ? ( cursor => $cursor->{'next'} )
+                    : ( since_id => $since_id )
+                ),
+            }
+        );
+        my $sth = $dbh->prepare(
+            "INSERT INTO disqus.authors(
+                id,
+                username, 
+                name, 
+                email, 
+                emailhash, 
+                url, 
+                joinedat, 
+                reputation, 
+                isverified, 
+                about, 
+                avatar_permalink, 
+                location, 
+                profileurl
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+        );
+
+        for my $author ( @$authors ) {
+            next if $author->{'isAnonymous'};
+            my $sql
+                = "SELECT id FROM disqus.authors where id = $author->{'id'}";
+            my $id = $dbh->selectrow_array( $sql );
+            next if $id;
+            say "Inserting: " . $author->{'name'};
+            my $rv = $sth->execute(
+                $author->{'id'},                  $author->{'username'},
+                $author->{'name'},                $author->{'email'},
+                $author->{'emailHash'},           $author->{'url'},
+                $author->{'joinedAt'},            $author->{'reputation'},
+                $author->{'isVerified'},          $author->{'about'},
+                $author->{'avatar'}{'permalink'}, $author->{'location'},
+                $author->{'profileUrl'},
+            );
+            if ( $sth->errstr ) {
+                say $sth->errstr;
+                say Dumper( $author );
+                die;
+            }
+        }
+
+        $sync_count += scalar @$authors;
+    } while ( scalar @$authors > 1 );
+    return $sync_count;
+}
