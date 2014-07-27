@@ -5,7 +5,6 @@ use warnings;
 use utf8;
 use feature ':5.10';
 use autodie;
-use Readonly;
 
 use FindBin;
 BEGIN { unshift @INC, "$FindBin::Bin/../lib" }
@@ -16,7 +15,7 @@ use Mojo::UserAgent;
 use Mojo::URL;
 use Mojo::Util;
 use Mojo::JSON;
-use Mojo::Util qw/ encode slurp spurt /;
+use Mojo::Util qw/ slurp /;
 
 use constant DISCUS_API => 'https://disqus.com/api/3.0/forums/';
 use constant LIST_POSTS => 'listPosts.json';
@@ -38,10 +37,13 @@ main();
 sub main {
     my $since_id = get_newest_author_id();
     say "Starting with author $since_id" if $since_id;
+    
     my $author_sync_count = sync_authors( $since_id );
     say "Synced $author_sync_count authors" if $author_sync_count > 1; 
+    
     my $since           = get_newest_post_date();
     say "Starting with post after $since" if $since;
+
     my $post_sync_count = sync_posts( $since );
     say "Final post sync count for this run was $post_sync_count";
 }
@@ -152,7 +154,7 @@ sub sync_posts {
         $sync_count += scalar @$posts;
         say "Synced $sync_count so far...";
 
-    } while ( scalar @$posts > 1 );
+    } while ( scalar @$posts >= 1 );
     return $sync_count;
 }
 
@@ -219,6 +221,6 @@ sub sync_authors {
         }
 
         $sync_count += scalar @$authors;
-    } while ( scalar @$authors > 1 );
+    } while ( scalar @$authors >= 1 );
     return $sync_count;
 }
