@@ -48,7 +48,7 @@ sub main {
     say "Final post sync count for this run was $post_sync_count";
 }
 
-sub list_posts {
+sub _list_posts {
     my $args = shift;
     my $ua   = Mojo::UserAgent->new()->max_redirects( 3 );
     my $url  = Mojo::URL->new;
@@ -60,7 +60,7 @@ sub list_posts {
     return ( $cursor, $posts );
 }
 
-sub list_users {
+sub _list_users {
     my $args = shift;
     my $ua   = Mojo::UserAgent->new()->max_redirects( 3 );
     my $url  = Mojo::URL->new;
@@ -93,7 +93,7 @@ sub sync_posts {
 
     # Loop & save
     do {
-        ( $cursor, $posts ) = list_posts(
+        ( $cursor, $posts ) = _list_posts(
             {   api_secret   => $conf->{'api_secret'},
                 access_token => $conf->{'access_token'},
                 forum        => $conf->{'forum'},
@@ -167,7 +167,7 @@ sub sync_authors {
 
     # Loop & save
     do {
-        ( $cursor, $authors ) = list_users(
+        ( $cursor, $authors ) = _list_users(
             {   api_secret   => $conf->{'api_secret'},
                 access_token => $conf->{'access_token'},
                 forum        => $conf->{'forum'},
