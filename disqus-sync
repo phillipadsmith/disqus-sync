@@ -153,6 +153,8 @@ sub sync_posts {
         }
         $sync_count += scalar @$posts;
         say "Synced $sync_count so far...";
+        sleep 5;
+        say "Sleeping for 5 seconds to avoid API limits";
 
     } while ( scalar @$posts >= 1 );
     return $sync_count;
