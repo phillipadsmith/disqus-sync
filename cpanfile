@@ -1,8 +1,8 @@
-requires 'App::Sqitch', '';
-requires 'DBI', '';
-requires 'DBD::Pg', '';
-requires 'Mojo::UserAgent', '';
-requires 'Mojo::URL', '';
-requires 'Mojo::Util', '';
-requires 'Mojo::JSON', '';
-requires 'Mojo::Util', '';
+requires 'App::Sqitch', '0';
+requires 'DBI', '0';
+requires 'DBD::Pg', '0';
+requires 'Mojo::UserAgent', '0';
+requires 'Mojo::URL', '0';
+requires 'Mojo::Util', '0';
+requires 'Mojo::JSON', '0';
+requires 'Mojo::Util', '0';
