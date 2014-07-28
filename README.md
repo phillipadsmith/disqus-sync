@@ -42,7 +42,9 @@ Install the database with [Sqitch](http://sqitch.org):
 	# verify_dir = verify
 	# extension = sql
 [core "pg"]
-	target = YOUR_DATABASE_NAME
+	username = YOUR_DATABASE_USER
+	password = YOUR_DATABASE_PW
+	db_name = YOUR_DATABASE_NAME
 [deploy]
 	verify = true
 [rebase]
